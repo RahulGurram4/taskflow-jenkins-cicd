@@ -1,3 +1,4 @@
+```groovy
 pipeline {
     agent any
 
@@ -52,6 +53,25 @@ pipeline {
                 '''
             }
         }
+
+        stage('Push Docker Images') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+
+                        docker push ${DOCKERHUB_USERNAME}/taskflow-backend:${IMAGE_TAG}
+                        docker push ${DOCKERHUB_USERNAME}/taskflow-frontend:${IMAGE_TAG}
+
+                        docker logout
+                    '''
+                }
+            }
+        }
     }
 
     post {
@@ -69,3 +89,4 @@ pipeline {
         }
     }
 }
+```
