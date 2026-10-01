@@ -1,3 +1,4 @@
+```groovy
 pipeline {
     agent any
 
@@ -35,8 +36,14 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 sh '''
-                    docker build -t ${DOCKERHUB_USERNAME}/taskflow-backend:${IMAGE_TAG} ./backend
-                    docker build --build-arg VITE_API_BASE_URL=/api -t ${DOCKERHUB_USERNAME}/taskflow-frontend:${IMAGE_TAG} ./frontend
+                    docker build \
+                        -t ${DOCKERHUB_USERNAME}/taskflow-backend:${IMAGE_TAG} \
+                        ./backend
+
+                    docker build \
+                        --build-arg VITE_API_BASE_URL=/api \
+                        -t ${DOCKERHUB_USERNAME}/taskflow-frontend:${IMAGE_TAG} \
+                        ./frontend
                 '''
             }
         }
@@ -46,9 +53,15 @@ pipeline {
                 sh '''
                     mkdir -p trivy-reports
 
-                    trivy image --format table --output trivy-reports/backend-${IMAGE_TAG}.txt ${DOCKERHUB_USERNAME}/taskflow-backend:${IMAGE_TAG}
+                    trivy image \
+                        --format table \
+                        --output trivy-reports/backend-${IMAGE_TAG}.txt \
+                        ${DOCKERHUB_USERNAME}/taskflow-backend:${IMAGE_TAG}
 
-                    trivy image --format table --output trivy-reports/frontend-${IMAGE_TAG}.txt ${DOCKERHUB_USERNAME}/taskflow-frontend:${IMAGE_TAG}
+                    trivy image \
+                        --format table \
+                        --output trivy-reports/frontend-${IMAGE_TAG}.txt \
+                        ${DOCKERHUB_USERNAME}/taskflow-frontend:${IMAGE_TAG}
                 '''
             }
         }
@@ -61,10 +74,15 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh '''
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        echo "$DOCKER_PASS" | docker login \
+                            -u "$DOCKER_USER" \
+                            --password-stdin
 
-                        docker push ${DOCKERHUB_USERNAME}/taskflow-backend:${IMAGE_TAG}
-                        docker push ${DOCKERHUB_USERNAME}/taskflow-frontend:${IMAGE_TAG}
+                        docker push \
+                            ${DOCKERHUB_USERNAME}/taskflow-backend:${IMAGE_TAG}
+
+                        docker push \
+                            ${DOCKERHUB_USERNAME}/taskflow-frontend:${IMAGE_TAG}
 
                         docker logout
                     '''
@@ -72,13 +90,17 @@ pipeline {
             }
         }
 
-        stage('Test EC2 SSH') {
+        stage('Deploy to EC2') {
             steps {
                 sshagent(credentials: ['taskflow-ec2-ssh']) {
                     sh '''
                         ssh -o StrictHostKeyChecking=no \
                             ec2-user@ec2-34-224-68-12.compute-1.amazonaws.com \
-                            'echo "SSH connection successful" && docker --version && docker-compose --version'
+                            "cd /home/ec2-user/taskflow-jenkins-cicd && \
+                             sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/' .env && \
+                             docker-compose pull && \
+                             docker-compose up -d && \
+                             docker-compose ps"
                     '''
                 }
             }
@@ -86,17 +108,20 @@ pipeline {
     }
 
     post {
+
         always {
             archiveArtifacts artifacts: 'trivy-reports/*.txt',
                              allowEmptyArchive: true
         }
 
         success {
-            echo "TaskFlow CI pipeline completed successfully."
+            echo "TaskFlow CI/CD pipeline completed successfully."
+            echo "Docker images pushed and application deployed to EC2."
         }
 
         failure {
-            echo "TaskFlow CI pipeline failed."
+            echo "TaskFlow CI/CD pipeline failed."
         }
     }
 }
+```
