@@ -71,6 +71,18 @@ pipeline {
                 }
             }
         }
+
+        stage('Test EC2 SSH') {
+            steps {
+                sshagent(credentials: ['taskflow-ec2-ssh']) {
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no \
+                            ec2-user@ec2-34-224-68-12.compute-1.amazonaws.com \
+                            'echo "SSH connection successful" && docker --version && docker-compose --version'
+                    '''
+                }
+            }
+        }
     }
 
     post {
