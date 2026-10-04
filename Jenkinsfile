@@ -53,11 +53,13 @@ pipeline {
                     mkdir -p trivy-reports
 
                     trivy image \
+                        --severity HIGH,CRITICAL \
                         --format table \
                         --output trivy-reports/backend-${IMAGE_TAG}.txt \
                         ${DOCKERHUB_USERNAME}/taskflow-backend:${IMAGE_TAG}
 
                     trivy image \
+                        --severity HIGH,CRITICAL \
                         --format table \
                         --output trivy-reports/frontend-${IMAGE_TAG}.txt \
                         ${DOCKERHUB_USERNAME}/taskflow-frontend:${IMAGE_TAG}
@@ -92,34 +94,39 @@ pipeline {
         stage('Deploy to EC2') {
             steps {
                 sshagent(credentials: ['taskflow-ec2-ssh']) {
-                    sh '''
+                    sh """
                         ssh -o StrictHostKeyChecking=no \
-                            ec2-user@ec2-34-224-68-12.compute-1.amazonaws.com \
-                            "cd /home/ec2-user/taskflow-jenkins-cicd && \
-                             sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/' .env && \
-                             docker-compose pull && \
-                             docker-compose up -d && \
-                             docker-compose ps"
-                    '''
+                            ec2-user@ec2-34-224-68-12.compute-1.amazonaws.com '
+                                cd /home/ec2-user/taskflow-jenkins-cicd
+                                sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/" .env
+                                docker-compose pull
+                                docker-compose up -d
+                                docker-compose ps
+                            '
+                    """
                 }
+            }
+        }
+
+        stage('Docker Image Cleanup') {
+            steps {
+                sh 'docker image prune -f'
             }
         }
     }
 
     post {
-
         always {
             archiveArtifacts artifacts: 'trivy-reports/*.txt',
                              allowEmptyArchive: true
         }
 
         success {
-            echo "TaskFlow CI/CD pipeline completed successfully."
-            echo "Docker images pushed and application deployed to EC2."
+            echo 'TaskFlow CI/CD pipeline completed successfully.'
         }
 
         failure {
-            echo "TaskFlow CI/CD pipeline failed."
+            echo 'TaskFlow CI/CD pipeline failed.'
         }
     }
 }
